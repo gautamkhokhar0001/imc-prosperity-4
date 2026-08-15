@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMC Prosperity Hackathon - Log Visualizer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .file-input-section {
+            background: #e9ecef;
+            padding: 20px;
+            border-radius: 6px;
+            text-align: center;
+            border: 2px dashed #adb5bd;
+            margin-bottom: 30px;
+        }
+        input[type="file"] {
+            font-size: 16px;
+        }
+        .chart-container {
+            position: relative;
+            height: 500px;
+            width: 100%;
+            margin-bottom: 50px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .chart-container:last-child {
+            border-bottom: none;
+        }
+        #error-msg {
+            color: #d32f2f;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>IMC Prosperity - Log Dashboard</h1>
+    
+    <div class="file-input-section">
+        <p>If running a local server, the visualizer attempts to load <b>83360.log</b> automatically.</p>
+        <p>Otherwise, manually select your log file below:</p>
+        <input type="file" id="fileInput" accept=".log,.txt,.json">
+        <div id="error-msg"></div>
+    </div>
+
+    <div id="dashboard">
+        </div>
+</div>
+
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const dashboard = document.getElementById('dashboard');
+    const errorMsg = document.getElementById('error-msg');
+
+    // 1. Attempt to fetch automatically (works if served via HTTP)
+    fetch('83360.log')
+        .then(res => {
+            if (!res.ok) throw new Error("File not found");
+            return res.text();
+        })
+        .then(text => parseAndRender(text))
+        .catch(err => {
+            console.log('Auto-fetch failed (expected if opened locally via file://). Awaiting manual file input.');
+        });
+
+    // 2. Fallback: Manual File Input
+    fileInput.addEventListener('change', e => {
+        errorMsg.innerText = "";
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = event => parseAndRender(event.target.result);
+        reader.readAsText(file);
+    });
+
+    function parseAndRender(text) {
+        dashboard.innerHTML = ''; // Clear previous charts
+        errorMsg.innerText = '';
+        
+        let data = {};
+        
+        // Strategy: Prosperity logs are sometimes wrapped in extra text or multiple JSON blocks. 
+        // We want the primary JSON holding "activitiesLog" and potentially "tradeHistory".
+        try {
+            const firstBrace = text.indexOf('{');
+            const lastBrace = text.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1) {
+                data = JSON.parse(text.substring(firstBrace, lastBrace + 1));
+            }
+        } catch(e) {
+            // Fallback line-by-line parsing if file contains multiple concatenated objects
+            text.split('\n').forEach(line => {
+                try {
+                    let parsed = JSON.parse(line);
+                    if(parsed.activitiesLog) data.activitiesLog = parsed.activitiesLog;
+                    if(parsed.tradeHistory) data.tradeHistory = parsed.tradeHistory;
+                } catch(err) {}
+            });
+        }
+
+        if (!data.activitiesLog) {
+            errorMsg.innerText = "Error: Could not find 'activitiesLog' data in the provided file.";
+            return;
+        }
+
+        // --- PARSE CSV DATA ---
+        const rows = data.activitiesLog.trim().split('\n');
+        const headers = rows[0].split(';');
+        
+        const activities = rows.slice(1).map(row => {
+            const cols = row.split(';');
+            let obj = {};
+            headers.forEach((h, i) => obj[h] = cols[i]);
+            return obj;
+        }).filter(r => r.timestamp !== undefined);
+
+        // Group activities by product
+        const byProduct = {};
+        activities.forEach(r => {
+            if(!r.product) return;
+            if(!byProduct[r.product]) byProduct[r.product] = [];
+            byProduct[r.product].push(r);
+        });
+
+        // Optional: Extract our trades to overlay on the price charts
+        const tradeHistory = data.tradeHistory || [];
+        const myTrades = tradeHistory.filter(t => t.buyer === "SUBMISSION" || t.seller === "SUBMISSION");
+
+        // --- RENDER DASHBOARD ---
+        renderPnLChart(byProduct);
+        
+        Object.keys(byProduct).forEach(product => {
+            renderProductPriceChart(product, byProduct[product], myTrades);
+        });
+    }
+
+    function renderPnLChart(byProduct) {
+        const products = Object.keys(byProduct);
+        const colors = ['#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4'];
+        
+        const wrapper = document.createElement('div');
+        wrapper.className = 'chart-container';
+        wrapper.innerHTML = '<canvas id="pnlChart"></canvas>';
+        dashboard.appendChild(wrapper);
+
+        const datasets = products.map((prod, i) => {
+            return {
+                label: `${prod} PnL`,
+                data: byProduct[prod].map(r => ({
+                    x: parseInt(r.timestamp), 
+                    y: parseFloat(r.profit_and_loss || 0)
+                })),
+                borderColor: colors[i % colors.length],
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0 // Keep lines clean
+            };
+        });
+
+        new Chart(document.getElementById('pnlChart'), {
+            type: 'line',
+            data: { datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: { 
+                    x: { type: 'linear', title: { display: true, text: 'Timestamp', font: { weight: 'bold' } } },
+                    y: { title: { display: true, text: 'Profit & Loss', font: { weight: 'bold' } } }
+                },
+                plugins: {
+                    title: { display: true, text: 'Overall Profit & Loss', font: { size: 20, weight: 'bold' } },
+                    tooltip: { enabled: true }
+                }
+            }
+        });
+    }
+
+    function renderProductPriceChart(product, productData, myTrades) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'chart-container';
+        wrapper.innerHTML = `<canvas id="chart_${product}"></canvas>`;
+        dashboard.appendChild(wrapper);
+
+        // Map Prices
+        const midPrices = productData.map(r => ({x: parseInt(r.timestamp), y: parseFloat(r.mid_price || 0)}));
+        const ask1Prices = productData.map(r => ({x: parseInt(r.timestamp), y: parseFloat(r.ask_price_1 || 0)}));
+        const bid1Prices = productData.map(r => ({x: parseInt(r.timestamp), y: parseFloat(r.bid_price_1 || 0)}));
+
+        // Map Trades
+        const productTrades = myTrades.filter(t => t.symbol === product);
+        const buys = productTrades.filter(t => t.buyer === "SUBMISSION").map(t => ({
+            x: t.timestamp, y: t.price, quantity: t.quantity
+        }));
+        const sells = productTrades.filter(t => t.seller === "SUBMISSION").map(t => ({
+            x: t.timestamp, y: t.price, quantity: t.quantity
+        }));
+
+        new Chart(document.getElementById(`chart_${product}`), {
+            data: {
+                datasets: [
+                    {
+                        type: 'scatter',
+                        label: 'Bot Buys',
+                        data: buys,
+                        backgroundColor: '#2e7d32', // Dark Green
+                        borderColor: '#1b5e20',
+                        pointRadius: 6,
+                        pointStyle: 'triangle',
+                        order: 1 // ensure dots are drawn above lines
+                    },
+                    {
+                        type: 'scatter',
+                        label: 'Bot Sells',
+                        data: sells,
+                        backgroundColor: '#c62828', // Dark Red
+                        borderColor: '#b71c1c',
+                        pointRadius: 6,
+                        pointStyle: 'triangle',
+                        rotation: 180, // Point downside
+                        order: 1
+                    },
+                    {
+                        type: 'line',
+                        label: 'Mid Price',
+                        data: midPrices,
+                        borderColor: '#2c3e50',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        order: 2
+                    },
+                    {
+                        type: 'line',
+                        label: 'Ask 1',
+                        data: ask1Prices,
+                        borderColor: 'rgba(231, 76, 60, 0.4)', // Faded Red
+                        borderWidth: 1.5,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false,
+                        order: 3
+                    },
+                    {
+                        type: 'line',
+                        label: 'Bid 1',
+                        data: bid1Prices,
+                        borderColor: 'rgba(39, 174, 96, 0.4)', // Faded Green
+                        borderWidth: 1.5,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false,
+                        order: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'nearest',
+                    axis: 'x',
+                    intersect: false
+                },
+                scales: {
+                    x: { type: 'linear', title: { display: true, text: 'Timestamp', font: { weight: 'bold' } } },
+                    y: { title: { display: true, text: 'Price', font: { weight: 'bold' } } }
+                },
+                plugins: {
+                    title: { display: true, text: `${product} - Market Depth & Trades`, font: { size: 20, weight: 'bold' } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) { label += ': '; }
+                                if (context.parsed.y !== null) { label += context.parsed.y; }
+                                // Include trade quantity in tooltip if applicable
+                                if (context.raw && context.raw.quantity) {
+                                    label += ` (Qty: ${context.raw.quantity})`;
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+</script>
+</body>
+</html>

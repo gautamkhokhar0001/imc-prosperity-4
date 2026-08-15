@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Data Visualizer — Round 2</title>
+    <meta name="description" content="Interactive visualization dashboard for IMC Prosperity trading data">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a1f35;
+            --bg-card-hover: #222845;
+            --border: #2a3050;
+            --text-primary: #f0f4ff;
+            --text-secondary: #8892b0;
+            --text-muted: #5a6380;
+            --accent-emerald: #34d399;
+            --accent-emerald-dim: rgba(52, 211, 153, 0.15);
+            --accent-tomato: #f87171;
+            --accent-tomato-dim: rgba(248, 113, 113, 0.15);
+            --accent-blue: #60a5fa;
+            --accent-purple: #a78bfa;
+            --accent-amber: #fbbf24;
+            --accent-cyan: #22d3ee;
+            --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --gradient-3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --shadow-lg: 0 20px 40px rgba(0,0,0,0.4);
+            --shadow-glow-emerald: 0 0 30px rgba(52, 211, 153, 0.15);
+            --shadow-glow-tomato: 0 0 30px rgba(248, 113, 113, 0.15);
+            --radius: 16px;
+            --radius-sm: 10px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated background gradient orbs */
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.08;
+            z-index: 0;
+            pointer-events: none;
+        }
+        body::before {
+            width: 600px; height: 600px;
+            background: var(--accent-emerald);
+            top: -100px; left: -100px;
+            animation: float 20s ease-in-out infinite;
+        }
+        body::after {
+            width: 500px; height: 500px;
+            background: var(--accent-purple);
+            bottom: -100px; right: -100px;
+            animation: float 25s ease-in-out infinite reverse;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0); }
+            25% { transform: translate(80px, 60px); }
+            50% { transform: translate(-40px, 120px); }
+            75% { transform: translate(60px, -40px); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .container {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 24px 32px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            padding: 48px 0 40px;
+            animation: fadeInUp 0.8s ease;
+        }
+
+        header h1 {
+            font-size: 2.8rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            background: linear-gradient(135deg, #f0f4ff 0%, #60a5fa 50%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            font-weight: 400;
+        }
+
+        /* Tab Navigation */
+        .tab-nav {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 36px;
+            animation: fadeInUp 0.8s ease 0.2s both;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 12px 28px;
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tab-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--gradient-1);
+            opacity: 0;
+            transition: opacity 0.35s ease;
+        }
+
+        .tab-btn:hover {
+            border-color: rgba(96, 165, 250, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(96, 165, 250, 0.15);
+        }
+
+        .tab-btn.active {
+            border-color: transparent;
+            color: #fff;
+            font-weight: 600;
+            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.3);
+        }
+
+        .tab-btn.active::before {
+            opacity: 1;
+        }
+
+        .tab-btn span {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Tab Content */
+        .tab-content {
+            display: none;
+            animation: fadeInUp 0.5s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 20px 24px;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            border-color: rgba(96, 165, 250, 0.3);
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .stat-card .label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .stat-card .value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .stat-card .sub {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .stat-card.emerald .value { color: var(--accent-emerald); }
+        .stat-card.tomato .value { color: var(--accent-tomato); }
+        .stat-card.blue .value { color: var(--accent-blue); }
+        .stat-card.purple .value { color: var(--accent-purple); }
+        .stat-card.amber .value { color: var(--accent-amber); }
+        .stat-card.cyan .value { color: var(--accent-cyan); }
+
+        /* Chart Grid */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .chart-grid.full {
+            grid-template-columns: 1fr;
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--gradient-1);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .chart-card:hover::before {
+            opacity: 1;
+        }
+
+        .chart-card:hover {
+            border-color: rgba(96, 165, 250, 0.25);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .chart-card h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .chart-card .chart-subtitle {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 320px;
+        }
+
+        .chart-card.tall .chart-container {
+            height: 420px;
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.6s ease;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        /* Section title */
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            padding-left: 16px;
+            border-left: 3px solid var(--accent-blue);
+            color: var(--text-primary);
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+            header h1 {
+                font-size: 2rem;
+            }
+            .container {
+                padding: 16px;
+            }
+        }
+
+        /* Product badge */
+        .product-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .product-badge.emeralds {
+            background: var(--accent-emerald-dim);
+            color: var(--accent-emerald);
+        }
+
+        .product-badge.tomatoes {
+            background: var(--accent-tomato-dim);
+            color: var(--accent-tomato);
+        }
+
+        .product-badges {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px 0 24px;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading trading data…</div>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>📊 Trading Data Visualizer</h1>
+            <p>Round 2 — ASH COATED OSMIUM & INTARIAN PEPPER ROOT Market Analysis</p>
+        </header>
+
+        <nav class="tab-nav" id="tabNav">
+            <button class="tab-btn" data-tab="prices-day--1" onclick="switchTab('prices-day--1')">
+                <span>📈 Prices · Day -1</span>
+            </button>
+            <button class="tab-btn active" data-tab="prices-day-0" onclick="switchTab('prices-day-0')">
+                <span>📈 Prices · Day 0</span>
+            </button>
+            <button class="tab-btn" data-tab="prices-day-1" onclick="switchTab('prices-day-1')">
+                <span>📈 Prices · Day 1</span>
+            </button>
+            <button class="tab-btn" data-tab="trades-day--1" onclick="switchTab('trades-day--1')">
+                <span>🔄 Trades · Day -1</span>
+            </button>
+            <button class="tab-btn" data-tab="trades-day-0" onclick="switchTab('trades-day-0')">
+                <span>🔄 Trades · Day 0</span>
+            </button>
+            <button class="tab-btn" data-tab="trades-day-1" onclick="switchTab('trades-day-1')">
+                <span>🔄 Trades · Day 1</span>
+            </button>
+        </nav>
+
+        <!-- FIX 1: All 6 tab content containers are now present -->
+        <div class="tab-content" id="tab-prices-day--1"></div>
+        <div class="tab-content active" id="tab-prices-day-0"></div>
+        <div class="tab-content" id="tab-prices-day-1"></div>
+        <div class="tab-content" id="tab-trades-day--1"></div>
+        <div class="tab-content" id="tab-trades-day-0"></div>
+        <div class="tab-content" id="tab-trades-day-1"></div>
+
+        <footer>
+            Built for IMC Prosperity Tutorial Round 2 — Data Visualization Dashboard
+        </footer>
+    </div>
+
+    <script>
+        // ===== Chart.js Defaults =====
+        Chart.defaults.color = '#8892b0';
+        Chart.defaults.borderColor = 'rgba(42, 48, 80, 0.5)';
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.font.size = 11;
+        Chart.defaults.plugins.legend.labels.usePointStyle = true;
+        Chart.defaults.plugins.legend.labels.pointStyleWidth = 10;
+        Chart.defaults.elements.point.radius = 0;
+        Chart.defaults.elements.point.hoverRadius = 5;
+        Chart.defaults.elements.line.tension = 0.3;
+        Chart.defaults.elements.line.borderWidth = 2;
+        Chart.defaults.animation.duration = 800;
+        Chart.defaults.interaction.mode = 'index';
+        Chart.defaults.interaction.intersect = false;
+
+        const COLORS = {
+            emerald: '#34d399',
+            emeraldDim: 'rgba(52, 211, 153, 0.12)',
+            tomato: '#f87171',
+            tomatoDim: 'rgba(248, 113, 113, 0.12)',
+            blue: '#60a5fa',
+            blueDim: 'rgba(96, 165, 250, 0.12)',
+            purple: '#a78bfa',
+            purpleDim: 'rgba(167, 139, 250, 0.12)',
+            amber: '#fbbf24',
+            amberDim: 'rgba(251, 191, 36, 0.12)',
+            cyan: '#22d3ee',
+            cyanDim: 'rgba(34, 211, 238, 0.12)',
+        };
+
+        let activeCharts = {};
+
+        // ===== CSV Parser =====
+        function parseCSV(text, sep = ';') {
+            const lines = text.trim().split('\n');
+            const headers = lines[0].split(sep);
+            return lines.slice(1).map(line => {
+                const vals = line.split(sep);
+                const obj = {};
+                headers.forEach((h, i) => {
+                    const v = (vals[i] || '').trim();
+                    if (v === '') {
+                        obj[h.trim()] = null;  // Empty fields → null (not string '')
+                    } else {
+                        const num = Number(v);
+                        obj[h.trim()] = isNaN(num) ? v : num;
+                    }
+                });
+                return obj;
+            });
+        }
+
+        // ===== Data Loading =====
+        async function loadCSV(url) {
+            const res = await fetch(url);
+            const text = await res.text();
+            return parseCSV(text);
+        }
+
+        // ===== Utils =====
+        function downsample(arr, maxPoints = 600) {
+            if (arr.length <= maxPoints) return arr;
+            const step = Math.ceil(arr.length / maxPoints);
+            return arr.filter((_, i) => i % step === 0);
+        }
+
+        function formatNum(n) {
+            if (n === undefined || n === null || isNaN(n)) return '—';
+            return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+        }
+
+        // ===== Tab Switching =====
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+            document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+
+            // Resize charts in the newly visible tab
+            setTimeout(() => {
+                Object.values(activeCharts).forEach(c => {
+                    if (c && c.canvas && c.canvas.offsetParent !== null) c.resize();
+                });
+            }, 100);
+        }
+
+        // ===== Build Prices Tab =====
+        function buildPricesTab(data, tabId, dayLabel) {
+            const container = document.getElementById('tab-' + tabId);
+            const emeralds = data.filter(d => d.product === 'ASH_COATED_OSMIUM');
+            const tomatoes = data.filter(d => d.product === 'INTARIAN_PEPPER_ROOT');
+
+            // Stats — filter out null mid_prices and only compute spread when both bid & ask exist
+            const emMid = emeralds.map(d => d.mid_price).filter(v => v != null);
+            const tmMid = tomatoes.map(d => d.mid_price).filter(v => v != null);
+            const emSpread = emeralds
+                .filter(d => d.ask_price_1 != null && d.bid_price_1 != null)
+                .map(d => d.ask_price_1 - d.bid_price_1);
+            const tmSpread = tomatoes
+                .filter(d => d.ask_price_1 != null && d.bid_price_1 != null)
+                .map(d => d.ask_price_1 - d.bid_price_1);
+
+            const stats = [
+                { label: 'ASH COATED OSMIUM Mid (Avg)', value: formatNum(emMid.reduce((a,b) => a+b, 0) / emMid.length), cls: 'emerald', sub: `Range: ${formatNum(Math.min(...emMid))} — ${formatNum(Math.max(...emMid))}` },
+                { label: 'INTARIAN PEPPER ROOT Mid (Avg)', value: formatNum(tmMid.reduce((a,b) => a+b, 0) / tmMid.length), cls: 'tomato', sub: `Range: ${formatNum(Math.min(...tmMid))} — ${formatNum(Math.max(...tmMid))}` },
+                { label: 'ASH COATED OSMIUM Avg Spread', value: formatNum(emSpread.reduce((a,b) => a+b, 0) / emSpread.length), cls: 'blue', sub: `${formatNum(emeralds.length)} data points` },
+                { label: 'INTARIAN PEPPER ROOT Avg Spread', value: formatNum(tmSpread.reduce((a,b) => a+b, 0) / tmSpread.length), cls: 'purple', sub: `${formatNum(tomatoes.length)} data points` },
+                { label: 'Total Records', value: formatNum(data.length), cls: 'cyan', sub: `Day ${dayLabel}` },
+            ];
+
+            let html = `<div class="stats-bar">`;
+            stats.forEach(s => {
+                html += `<div class="stat-card ${s.cls}">
+                    <div class="label">${s.label}</div>
+                    <div class="value">${s.value}</div>
+                    <div class="sub">${s.sub}</div>
+                </div>`;
+            });
+            html += `</div>`;
+
+            // Charts
+            html += `<h2 class="section-title">ASH COATED OSMIUM</h2>
+            <div class="product-badges">
+                <span class="product-badge emeralds">● ASH COATED OSMIUM</span>
+            </div>
+            <div class="chart-grid">
+                <div class="chart-card tall">
+                    <h3>Mid Price Over Time</h3>
+                    <div class="chart-subtitle">Best bid/ask mid-point across timestamps</div>
+                    <div class="chart-container"><canvas id="${tabId}-em-mid"></canvas></div>
+                </div>
+                <div class="chart-card tall">
+                    <h3>Bid-Ask Spread</h3>
+                    <div class="chart-subtitle">ask₁ − bid₁ spread over time</div>
+                    <div class="chart-container"><canvas id="${tabId}-em-spread"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Bid vs Ask Volume (Level 1)</h3>
+                    <div class="chart-subtitle">Top-of-book volume comparison</div>
+                    <div class="chart-container"><canvas id="${tabId}-em-vol"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Mid Price Distribution</h3>
+                    <div class="chart-subtitle">Histogram of mid-price observations</div>
+                    <div class="chart-container"><canvas id="${tabId}-em-hist"></canvas></div>
+                </div>
+            </div>
+            <div class="chart-grid full">
+                <div class="chart-card tall">
+                    <h3>Order Book Depths & VWAP</h3>
+                    <div class="chart-subtitle">Visualization of Bid/Ask Levels (1-3), Best Bid/Ask, and Volume-Weighted Average Prices</div>
+                    <div class="chart-container"><canvas id="${tabId}-em-orderbook"></canvas></div>
+                </div>
+            </div>`;
+
+            html += `<h2 class="section-title">INTARIAN PEPPER ROOT</h2>
+            <div class="product-badges">
+                <span class="product-badge tomatoes">● INTARIAN PEPPER ROOT</span>
+            </div>
+            <div class="chart-grid">
+                <div class="chart-card tall">
+                    <h3>Mid Price Over Time</h3>
+                    <div class="chart-subtitle">Best bid/ask mid-point across timestamps</div>
+                    <div class="chart-container"><canvas id="${tabId}-tm-mid"></canvas></div>
+                </div>
+                <div class="chart-card tall">
+                    <h3>Bid-Ask Spread</h3>
+                    <div class="chart-subtitle">ask₁ − bid₁ spread over time</div>
+                    <div class="chart-container"><canvas id="${tabId}-tm-spread"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Bid vs Ask Volume (Level 1)</h3>
+                    <div class="chart-subtitle">Top-of-book volume comparison</div>
+                    <div class="chart-container"><canvas id="${tabId}-tm-vol"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Mid Price Distribution</h3>
+                    <div class="chart-subtitle">Histogram of mid-price observations</div>
+                    <div class="chart-container"><canvas id="${tabId}-tm-hist"></canvas></div>
+                </div>
+            </div>
+            <div class="chart-grid full">
+                <div class="chart-card tall">
+                    <h3>Order Book Depths & VWAP</h3>
+                    <div class="chart-subtitle">Visualization of Bid/Ask Levels (1-3), Best Bid/Ask, and Volume-Weighted Average Prices</div>
+                    <div class="chart-container"><canvas id="${tabId}-tm-orderbook"></canvas></div>
+                </div>
+            </div>`;
+
+            // Combined overlay
+            html += `<h2 class="section-title">Combined Comparison</h2>
+            <div class="chart-grid full">
+                <div class="chart-card tall">
+                    <h3>ASH COATED OSMIUM vs INTARIAN PEPPER ROOT — Normalized Mid Price</h3>
+                    <div class="chart-subtitle">Both products scaled to start at 100 for comparison</div>
+                    <div class="chart-container"><canvas id="${tabId}-combined"></canvas></div>
+                </div>
+            </div>`;
+
+            container.innerHTML = html;
+
+            // Build charts
+            buildMidPriceChart(tabId, '-em-mid', emeralds, COLORS.emerald, COLORS.emeraldDim);
+            buildMidPriceChart(tabId, '-tm-mid', tomatoes, COLORS.tomato, COLORS.tomatoDim);
+            buildSpreadChart(tabId, '-em-spread', emeralds, COLORS.blue, COLORS.blueDim);
+            buildSpreadChart(tabId, '-tm-spread', tomatoes, COLORS.purple, COLORS.purpleDim);
+            buildVolumeChart(tabId, '-em-vol', emeralds, COLORS.emerald, COLORS.blue);
+            buildVolumeChart(tabId, '-tm-vol', tomatoes, COLORS.tomato, COLORS.amber);
+            buildHistogram(tabId, '-em-hist', emeralds.map(d => d.mid_price).filter(v => v != null), COLORS.emerald, COLORS.emeraldDim);
+            buildHistogram(tabId, '-tm-hist', tomatoes.map(d => d.mid_price).filter(v => v != null), COLORS.tomato, COLORS.tomatoDim);
+            buildCombinedChart(tabId, emeralds, tomatoes);
+            buildOrderBookChart(tabId, '-em-orderbook', emeralds);
+            buildOrderBookChart(tabId, '-tm-orderbook', tomatoes);
+        }
+
+        function buildMidPriceChart(tabId, suffix, data, color, dimColor) {
+            const ds = downsample(data);
+            const ctx = document.getElementById(tabId + suffix).getContext('2d');
+            activeCharts[tabId + suffix] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ds.map(d => d.timestamp),
+                    datasets: [
+                        {
+                            label: 'Mid Price',
+                            data: ds.map(d => d.mid_price),
+                            borderColor: color,
+                            backgroundColor: dimColor,
+                            fill: true,
+                            borderWidth: 2,
+                            spanGaps: true,
+                        },
+                        {
+                            label: 'Best Bid',
+                            data: ds.map(d => d.bid_price_1 != null ? d.bid_price_1 : null),
+                            borderColor: 'rgba(96, 165, 250, 0.5)',
+                            borderWidth: 1,
+                            borderDash: [4, 4],
+                            fill: false,
+                            spanGaps: true,
+                        },
+                        {
+                            label: 'Best Ask',
+                            data: ds.map(d => d.ask_price_1 != null ? d.ask_price_1 : null),
+                            borderColor: 'rgba(251, 191, 36, 0.5)',
+                            borderWidth: 1,
+                            borderDash: [4, 4],
+                            fill: false,
+                            spanGaps: true,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Timestamp' }, ticks: { maxTicksLimit: 10 } },
+                        y: { title: { display: true, text: 'Price' } }
+                    },
+                    plugins: { legend: { position: 'top' } }
+                }
+            });
+        }
+
+        function buildSpreadChart(tabId, suffix, data, color, dimColor) {
+            const ds = downsample(data);
+            const ctx = document.getElementById(tabId + suffix).getContext('2d');
+            activeCharts[tabId + suffix] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ds.map(d => d.timestamp),
+                    datasets: [{
+                        label: 'Spread (Ask₁ − Bid₁)',
+                        data: ds.map(d => (d.ask_price_1 != null && d.bid_price_1 != null) ? d.ask_price_1 - d.bid_price_1 : null),
+                        borderColor: color,
+                        backgroundColor: dimColor,
+                        fill: true,
+                        borderWidth: 1.5,
+                        spanGaps: true,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Timestamp' }, ticks: { maxTicksLimit: 10 } },
+                        y: { title: { display: true, text: 'Spread' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function buildVolumeChart(tabId, suffix, data, color1, color2) {
+            const ds = downsample(data, 300);
+            const ctx = document.getElementById(tabId + suffix).getContext('2d');
+            activeCharts[tabId + suffix] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ds.map(d => d.timestamp),
+                    datasets: [
+                        {
+                            label: 'Bid Vol 1',
+                            data: ds.map(d => d.bid_volume_1 != null ? d.bid_volume_1 : null),
+                            backgroundColor: color1 + '99',
+                            borderRadius: 2,
+                        },
+                        {
+                            label: 'Ask Vol 1',
+                            data: ds.map(d => d.ask_volume_1 != null ? d.ask_volume_1 : null),
+                            backgroundColor: color2 + '99',
+                            borderRadius: 2,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { display: false },
+                        y: { title: { display: true, text: 'Volume' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function buildHistogram(tabId, suffix, values, color, dimColor) {
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const bins = 40;
+            const binWidth = (max - min) / bins || 1;
+            const counts = new Array(bins).fill(0);
+            const labels = [];
+            for (let i = 0; i < bins; i++) {
+                const lo = min + i * binWidth;
+                labels.push(lo.toFixed(1));
+            }
+            values.forEach(v => {
+                let idx = Math.floor((v - min) / binWidth);
+                if (idx >= bins) idx = bins - 1;
+                counts[idx]++;
+            });
+
+            const ctx = document.getElementById(tabId + suffix).getContext('2d');
+            activeCharts[tabId + suffix] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Frequency',
+                        data: counts,
+                        backgroundColor: color + '88',
+                        borderColor: color,
+                        borderWidth: 1,
+                        borderRadius: 3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Mid Price' }, ticks: { maxTicksLimit: 10 } },
+                        y: { title: { display: true, text: 'Count' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function buildOrderBookChart(tabId, suffix, data) {
+            const ds = downsample(data);
+            const labels = ds.map(d => d.timestamp);
+
+            const vwapBid = ds.map(d => {
+                let v = 0, q = 0;
+                if (d.bid_volume_1 != null) { v += d.bid_price_1 * d.bid_volume_1; q += d.bid_volume_1; }
+                if (d.bid_volume_2 != null) { v += d.bid_price_2 * d.bid_volume_2; q += d.bid_volume_2; }
+                if (d.bid_volume_3 != null) { v += d.bid_price_3 * d.bid_volume_3; q += d.bid_volume_3; }
+                return q > 0 ? v / q : null;
+            });
+
+            const vwapAsk = ds.map(d => {
+                let v = 0, q = 0;
+                if (d.ask_volume_1 != null) { v += d.ask_price_1 * d.ask_volume_1; q += d.ask_volume_1; }
+                if (d.ask_volume_2 != null) { v += d.ask_price_2 * d.ask_volume_2; q += d.ask_volume_2; }
+                if (d.ask_volume_3 != null) { v += d.ask_price_3 * d.ask_volume_3; q += d.ask_volume_3; }
+                return q > 0 ? v / q : null;
+            });
+
+            const ctx = document.getElementById(tabId + suffix).getContext('2d');
+            activeCharts[tabId + suffix] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Ask 3',
+                            data: ds.map(d => d.ask_price_3 != null ? d.ask_price_3 : null),
+                            borderColor: 'rgba(248, 113, 113, 0.2)',
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: false,
+                            spanGaps: true,
+                        },
+                        {
+                            label: 'Ask 2',
+                            data: ds.map(d => d.ask_price_2 != null ? d.ask_price_2 : null),
+                            borderColor: 'rgba(248, 113, 113, 0.4)',
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: false,
+                            spanGaps: true,
+                        },
+                        {
+                            label: 'Best Ask (Ask 1)',
+                            data: ds.map(d => d.ask_price_1 != null ? d.ask_price_1 : null),
+                            borderColor: 'rgba(248, 113, 113, 0.9)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false,
+                            spanGaps: true,
+                        },
+                        {
+                            label: 'VWAP Ask',
+                            data: vwapAsk,
+                            borderColor: COLORS.amber,
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false,
+                            spanGaps: true,
+                        },
+                        {
+                            label: 'VWAP Bid',
+                            data: vwapBid,
+                            borderColor: COLORS.cyan,
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false,
+                            spanGaps: true,
+                        },
+                        {
+                            label: 'Best Bid (Bid 1)',
+                            data: ds.map(d => d.bid_price_1 != null ? d.bid_price_1 : null),
+                            borderColor: 'rgba(52, 211, 153, 0.9)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false,
+                            spanGaps: true,
+                        },
+                        {
+                            label: 'Bid 2',
+                            data: ds.map(d => d.bid_price_2 != null ? d.bid_price_2 : null),
+                            borderColor: 'rgba(52, 211, 153, 0.4)',
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: false,
+                            spanGaps: true,
+                        },
+                        {
+                            label: 'Bid 3',
+                            data: ds.map(d => d.bid_price_3 != null ? d.bid_price_3 : null),
+                            borderColor: 'rgba(52, 211, 153, 0.2)',
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: false,
+                            spanGaps: true,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Timestamp' }, ticks: { maxTicksLimit: 10 } },
+                        y: { title: { display: true, text: 'Price' } }
+                    },
+                    plugins: { 
+                        legend: { position: 'right' } 
+                    }
+                }
+            });
+        }
+
+        function buildCombinedChart(tabId, emeralds, tomatoes) {
+            const emDs = downsample(emeralds);
+            const tmDs = downsample(tomatoes);
+
+            const emBase = emDs[0]?.mid_price || 1;
+            const tmBase = tmDs[0]?.mid_price || 1;
+
+            const ctx = document.getElementById(tabId + '-combined').getContext('2d');
+            activeCharts[tabId + '-combined'] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: emDs.map(d => d.timestamp),
+                    datasets: [
+                        {
+                            label: 'ASH COATED OSMIUM (indexed)',
+                            data: emDs.map(d => (d.mid_price / emBase) * 100),
+                            borderColor: COLORS.emerald,
+                            backgroundColor: COLORS.emeraldDim,
+                            fill: false,
+                            borderWidth: 2,
+                        },
+                        {
+                            label: 'INTARIAN PEPPER ROOT (indexed)',
+                            data: tmDs.map(d => (d.mid_price / tmBase) * 100),
+                            borderColor: COLORS.tomato,
+                            backgroundColor: COLORS.tomatoDim,
+                            fill: false,
+                            borderWidth: 2,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Timestamp' }, ticks: { maxTicksLimit: 12 } },
+                        y: { title: { display: true, text: 'Indexed Price (base=100)' } }
+                    },
+                    plugins: {
+                        annotation: {
+                            annotations: {
+                                baseline: {
+                                    type: 'line',
+                                    yMin: 100,
+                                    yMax: 100,
+                                    borderColor: 'rgba(255,255,255,0.15)',
+                                    borderDash: [6, 4],
+                                    borderWidth: 1,
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ===== Build Trades Tab =====
+        function buildTradesTab(data, tabId, dayLabel) {
+            const container = document.getElementById('tab-' + tabId);
+            const emeralds = data.filter(d => d.symbol === 'ASH_COATED_OSMIUM');
+            const tomatoes = data.filter(d => d.symbol === 'INTARIAN_PEPPER_ROOT');
+
+            const emPrices = emeralds.map(d => d.price);
+            const tmPrices = tomatoes.map(d => d.price);
+            const emQty = emeralds.map(d => d.quantity);
+            const tmQty = tomatoes.map(d => d.quantity);
+
+            const stats = [
+                { label: 'ASH COATED OSMIUM Trades', value: formatNum(emeralds.length), cls: 'emerald', sub: `Avg price: ${formatNum(emPrices.reduce((a,b)=>a+b,0)/emPrices.length)}` },
+                { label: 'INTARIAN PEPPER ROOT Trades', value: formatNum(tomatoes.length), cls: 'tomato', sub: `Avg price: ${formatNum(tmPrices.reduce((a,b)=>a+b,0)/tmPrices.length)}` },
+                { label: 'Total Volume (EM)', value: formatNum(emQty.reduce((a,b)=>a+b,0)), cls: 'blue', sub: `Avg qty: ${formatNum(emQty.reduce((a,b)=>a+b,0)/emQty.length)}` },
+                { label: 'Total Volume (TM)', value: formatNum(tmQty.reduce((a,b)=>a+b,0)), cls: 'purple', sub: `Avg qty: ${formatNum(tmQty.reduce((a,b)=>a+b,0)/tmQty.length)}` },
+                { label: 'Total Trades', value: formatNum(data.length), cls: 'cyan', sub: `Day ${dayLabel}` },
+            ];
+
+            let html = `<div class="stats-bar">`;
+            stats.forEach(s => {
+                html += `<div class="stat-card ${s.cls}">
+                    <div class="label">${s.label}</div>
+                    <div class="value">${s.value}</div>
+                    <div class="sub">${s.sub}</div>
+                </div>`;
+            });
+            html += `</div>`;
+
+            html += `<h2 class="section-title">ASH COATED OSMIUM Trades</h2>
+            <div class="product-badges"><span class="product-badge emeralds">● Emeralds</span></div>
+            <div class="chart-grid">
+                <div class="chart-card tall">
+                    <h3>Trade Price Over Time</h3>
+                    <div class="chart-subtitle">Each dot = one trade execution</div>
+                    <div class="chart-container"><canvas id="${tabId}-em-price"></canvas></div>
+                </div>
+                <div class="chart-card tall">
+                    <h3>Trade Quantity Over Time</h3>
+                    <div class="chart-subtitle">Volume of each individual trade</div>
+                    <div class="chart-container"><canvas id="${tabId}-em-qty"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Price Distribution</h3>
+                    <div class="chart-subtitle">Histogram of trade execution prices</div>
+                    <div class="chart-container"><canvas id="${tabId}-em-hist"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Cumulative Volume</h3>
+                    <div class="chart-subtitle">Running total of traded quantity</div>
+                    <div class="chart-container"><canvas id="${tabId}-em-cumvol"></canvas></div>
+                </div>
+            </div>`;
+
+            html += `<h2 class="section-title">INTARIAN PEPPER ROOT Trades</h2>
+            <div class="product-badges"><span class="product-badge tomatoes">● Tomatoes</span></div>
+            <div class="chart-grid">
+                <div class="chart-card tall">
+                    <h3>Trade Price Over Time</h3>
+                    <div class="chart-subtitle">Each dot = one trade execution</div>
+                    <div class="chart-container"><canvas id="${tabId}-tm-price"></canvas></div>
+                </div>
+                <div class="chart-card tall">
+                    <h3>Trade Quantity Over Time</h3>
+                    <div class="chart-subtitle">Volume of each individual trade</div>
+                    <div class="chart-container"><canvas id="${tabId}-tm-qty"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Price Distribution</h3>
+                    <div class="chart-subtitle">Histogram of trade execution prices</div>
+                    <div class="chart-container"><canvas id="${tabId}-tm-hist"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Cumulative Volume</h3>
+                    <div class="chart-subtitle">Running total of traded quantity</div>
+                    <div class="chart-container"><canvas id="${tabId}-tm-cumvol"></canvas></div>
+                </div>
+            </div>`;
+
+            // Combined
+            html += `<h2 class="section-title">Combined View</h2>
+            <div class="chart-grid full">
+                <div class="chart-card tall">
+                    <h3>All Trades — Price & Volume Bubble Chart</h3>
+                    <div class="chart-subtitle">Bubble size = trade quantity; color = product</div>
+                    <div class="chart-container"><canvas id="${tabId}-bubble"></canvas></div>
+                </div>
+            </div>`;
+
+            container.innerHTML = html;
+
+            // Build trade charts
+            buildTradeScatter(tabId, '-em-price', emeralds, COLORS.emerald);
+            buildTradeScatter(tabId, '-tm-price', tomatoes, COLORS.tomato);
+            buildTradeQty(tabId, '-em-qty', emeralds, COLORS.blue, COLORS.blueDim);
+            buildTradeQty(tabId, '-tm-qty', tomatoes, COLORS.amber, COLORS.amberDim);
+            buildHistogram(tabId, '-em-hist', emPrices.filter(p => !isNaN(p)), COLORS.emerald, COLORS.emeraldDim);
+            buildHistogram(tabId, '-tm-hist', tmPrices.filter(p => !isNaN(p)), COLORS.tomato, COLORS.tomatoDim);
+            buildCumVolChart(tabId, '-em-cumvol', emeralds, COLORS.emerald, COLORS.emeraldDim);
+            buildCumVolChart(tabId, '-tm-cumvol', tomatoes, COLORS.tomato, COLORS.tomatoDim);
+            buildBubbleChart(tabId, emeralds, tomatoes);
+        }
+
+        function buildTradeScatter(tabId, suffix, data, color) {
+            const ctx = document.getElementById(tabId + suffix).getContext('2d');
+            activeCharts[tabId + suffix] = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Trade Price',
+                        data: data.map(d => ({ x: d.timestamp, y: d.price })),
+                        backgroundColor: color + 'cc',
+                        borderColor: color,
+                        pointRadius: 4,
+                        pointHoverRadius: 7,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Timestamp' }, ticks: { maxTicksLimit: 10 } },
+                        y: { title: { display: true, text: 'Price' } }
+                    }
+                }
+            });
+        }
+
+        function buildTradeQty(tabId, suffix, data, color, dimColor) {
+            const ctx = document.getElementById(tabId + suffix).getContext('2d');
+            activeCharts[tabId + suffix] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.timestamp),
+                    datasets: [{
+                        label: 'Quantity',
+                        data: data.map(d => d.quantity),
+                        backgroundColor: color + '88',
+                        borderColor: color,
+                        borderWidth: 1,
+                        borderRadius: 3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { display: false },
+                        y: { title: { display: true, text: 'Quantity' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function buildCumVolChart(tabId, suffix, data, color, dimColor) {
+            let cum = 0;
+            const cumData = data.map(d => { cum += d.quantity; return cum; });
+            const ctx = document.getElementById(tabId + suffix).getContext('2d');
+            activeCharts[tabId + suffix] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.timestamp),
+                    datasets: [{
+                        label: 'Cumulative Volume',
+                        data: cumData,
+                        borderColor: color,
+                        backgroundColor: dimColor,
+                        fill: true,
+                        borderWidth: 2,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Timestamp' }, ticks: { maxTicksLimit: 10 } },
+                        y: { title: { display: true, text: 'Cumulative Qty' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function buildBubbleChart(tabId, emeralds, tomatoes) {
+            const ctx = document.getElementById(tabId + '-bubble').getContext('2d');
+            activeCharts[tabId + '-bubble'] = new Chart(ctx, {
+                type: 'bubble',
+                data: {
+                    datasets: [
+                        {
+                            label: 'ASH COATED OSMIUM',
+                            data: emeralds.map(d => ({ x: d.timestamp, y: d.price, r: Math.max(d.quantity * 1.5, 3) })),
+                            backgroundColor: COLORS.emerald + '66',
+                            borderColor: COLORS.emerald,
+                            borderWidth: 1,
+                        },
+                        {
+                            label: 'INTARIAN PEPPER ROOT',
+                            data: tomatoes.map(d => ({ x: d.timestamp, y: d.price, r: Math.max(d.quantity * 1.5, 3) })),
+                            backgroundColor: COLORS.tomato + '66',
+                            borderColor: COLORS.tomato,
+                            borderWidth: 1,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Timestamp' }, ticks: { maxTicksLimit: 12 } },
+                        y: { title: { display: true, text: 'Price' } }
+                    }
+                }
+            });
+        }
+
+        // ===== Init =====
+        async function init() {
+            try {
+                // FIX 2 & 3: Corrected file-to-variable mapping so each variable
+                // receives the data matching its name (D1 = day -1, D2 = day -2).
+                // Original code had prices_round_1_day_-2.csv assigned to pricesD1
+                // and prices_round_1_day_-1.csv assigned to pricesD2 (swapped).
+                const [pricesD_1, pricesD0, pricesD1, tradesD_1, tradesD0, tradesD1] = await Promise.all([
+                    loadCSV('prices_round_2_day_-1.csv'),  // pricesD_1 → Day -1 ✓
+                    loadCSV('prices_round_2_day_0.csv'),   // pricesD0 → Day  0 ✓
+                    loadCSV('prices_round_2_day_1.csv'),   // pricesD1 → Day  1 ✓
+                    loadCSV('trades_round_2_day_-1.csv'),  // tradesD_1 → Day -1 ✓
+                    loadCSV('trades_round_2_day_0.csv'),   // tradesD0 → Day  0 ✓
+                    loadCSV('trades_round_2_day_1.csv'),   // tradesD1 → Day  1 ✓
+                ]);
+
+                buildPricesTab(pricesD_1, 'prices-day--1', '-1');
+                buildPricesTab(pricesD0, 'prices-day-0', '0');
+                buildPricesTab(pricesD1, 'prices-day-1', '1');
+                buildTradesTab(tradesD_1, 'trades-day--1', '-1');
+                buildTradesTab(tradesD0, 'trades-day-0', '0');
+                buildTradesTab(tradesD1, 'trades-day-1', '1');
+
+            } catch (err) {
+                console.error('Failed to load data:', err);
+            } finally {
+                setTimeout(() => {
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                }, 400);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
